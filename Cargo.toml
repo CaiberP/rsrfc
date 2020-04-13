@@ -1,0 +1,18 @@
+[package]
+name = "rsrfc"
+version = "0.1.0"
+authors = ["Hans-Christian Esperer <hc@hcesperer.org>"]
+edition = "2018"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "rsrfc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rsrfctest"
+path = "src/main.rs"
+
+[dependencies]
+widestring = "0.4.0"
