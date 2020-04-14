@@ -32,6 +32,13 @@ production systems ;-) )
 * Calling RFC functions, setting and getting parameters, including
   table parameters.
 
+## Improvement needed:
+
+* Right now, there exist functions such as set_int, set_string, etc.
+  Would be nice to abstract to a single function using traits.
+
+* Documentation is rudimentary to non-existing; work in progress!
+
 ## What doesn't work:
 
 * Various datatypes don't have implementations yet.
