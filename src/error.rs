@@ -87,3 +87,20 @@ impl std::fmt::Debug for RfcErrorInfo {
         write!(f, "{}", msg)
     }
 }
+
+impl std::fmt::Display for RfcErrorInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut len = 0;
+        for i in 0..self.message.len() {
+            if *self.message.get(i).unwrap() == 0 {
+                len = i;
+                break;
+            }
+        }
+        let mut msg = String::from_utf16_lossy(&self.message);
+        msg.truncate(len);
+        write!(f, "{}", msg)
+    }
+}
+
+impl std::error::Error for RfcErrorInfo {}
