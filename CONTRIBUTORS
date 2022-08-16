@@ -1,0 +1,2 @@
+github/SebastianWorkAcct: Implemented std::fmt::Display and
+    std::error::Error for RfcErrorInfo
