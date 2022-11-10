@@ -1,3 +1,6 @@
+extern crate dlopen;
+#[macro_use]
+extern crate dlopen_derive;
 extern crate widestring;
 
 use std::collections::HashMap;
@@ -22,6 +25,10 @@ pub struct RfcConnectionParameters<'a> {
     pub lang: &'a str,
 }
 
+pub enum RfcValue {
+    RfcString(String),
+}
+
 impl<'a> RfcConnectionParameters<'a> {
     /// Convert to a more generic RfcConnParmHelper structure
     fn convert(&self) -> RfcConnParmHelper {
@@ -37,50 +44,95 @@ impl<'a> RfcConnectionParameters<'a> {
 }
 
 /// An open RFC connection
-pub struct RfcConnection {
+pub struct RfcConnection<'rfclib> {
     connection_handle: *mut RfcConnectionHandle,
+    rfc_lib: &'rfclib RfcLib
 }
 
 /// An RFC function
 pub struct RfcFunction<'conn, 'fun: 'conn> {
-    connection: &'conn RfcConnection,
+    connection: &'conn RfcConnection<'conn>,
     fun: *mut RfcDataContainerHandle,
     fun_desc: Vec<RfcParameter<'conn, 'fun>>,
 }
 
-impl RfcConnection {
     /// Open a conneciton to an SAP system via RFC.
     /// If you need to specify more RFC connection parameters than
     /// RfcConnectinoParameters would allow you, use from_parm_helper or from_hashmap
     /// methods instead.
-    pub fn new(conn_info: &RfcConnectionParameters) -> Result<RfcConnection, RfcErrorInfo> {
+pub struct RfcLib {
+    rfc_api: dlopen::wrapper::Container<crate::rfc::RfcApi>
+}
+
+
+impl RfcLib {
+    #[cfg(all(target_family = "unix", not(target_vendor = "apple")))]
+    pub fn new() -> Result<RfcLib, String> {
+        let rfc_api : dlopen::wrapper::Container<crate::rfc::RfcApi> = unsafe {
+            dlopen::wrapper::Container::load("libsapnwrfc.so")
+        }.map_err(|e| {
+            format!("Error trying to load libsapnwrfc: {:?}", e)
+        })?;
+        Ok(RfcLib {
+            rfc_api
+        })
+    }
+
+    #[cfg(all(target_family = "unix", target_vendor = "apple"))]
+    pub fn new() -> Result<RfcLib, String> {
+        let rfc_api : dlopen::wrapper::Container<crate::rfc::RfcApi> = unsafe {
+            dlopen::wrapper::Container::load("libsapnwrfc.dylib")
+        }.map_err(|e| {
+            format!("Error trying to load libsapnwrfc: {:?}", e)
+        })?;
+        Ok(RfcLib {
+            rfc_api
+        })
+    }
+
+    #[cfg(target_family = "windows")]
+    pub fn new() -> Result<RfcLib, String> {
+        let rfc_api : dlopen::wrapper::Container<crate::rfc::RfcApi> = unsafe {
+            dlopen::wrapper::Container::load("sapnwrfc.dll")
+        }.map_err(|e| {
+            format!("Error trying to load libsapnwrfc: {:?}", e)
+        })?;
+        Ok(RfcLib {
+            rfc_api
+        })
+    }
+}
+
+impl <'rfclib>RfcConnection<'rfclib> {
+    pub fn new<'conn>(conn_info: &RfcConnectionParameters, rfc_lib: &'conn RfcLib) -> Result<RfcConnection<'conn>, RfcErrorInfo> {
         let parms = conn_info.convert();
-        RfcConnection::from_parm_helper(parms)
+        RfcConnection::from_parm_helper(parms, rfc_lib)
     }
 
     /// Open a connection to an SAP system via RFC
-    pub fn from_parm_helper(parms: RfcConnParmHelper) -> Result<RfcConnection, RfcErrorInfo> {
+    pub fn from_parm_helper<'conn>(parms: RfcConnParmHelper, rfc_lib: &'conn RfcLib) -> Result<RfcConnection<'conn>, RfcErrorInfo> {
         let mut err_trunk = RfcErrorInfo::new();
         unsafe {
             let ch =
-                parms.as_vec(|pv| RfcOpenConnection(pv.as_ptr(), pv.len() as u32, &mut err_trunk));
+                parms.as_vec(|pv| rfc_lib.rfc_api.RfcOpenConnection(pv.as_ptr(), pv.len() as u32, &mut err_trunk));
             if ch.is_null() {
                 Err(err_trunk)
             } else {
                 Ok(RfcConnection {
                     connection_handle: ch,
+                    rfc_lib
                 })
             }
         }
     }
 
     /// Open a connection to an SAP system via RFC
-    pub fn from_hashmap(parms: &HashMap<String, String>) -> Result<RfcConnection, RfcErrorInfo> {
+    pub fn from_hashmap<'conn>(parms: &HashMap<String, String>, rfc_lib: &'conn RfcLib) -> Result<RfcConnection<'conn>, RfcErrorInfo> {
         let mut ph = RfcConnParmHelper::new();
         for (k, v) in parms {
             ph.add(k, v);
         }
-        RfcConnection::from_parm_helper(ph)
+        RfcConnection::from_parm_helper(ph, rfc_lib)
     }
 
     /// Return a reference to an RFC enabled function, if it exists on
@@ -92,11 +144,11 @@ impl RfcConnection {
         let name_uc = U16CString::from_str(name).unwrap().into_vec_with_nul();
         let mut err_trunk = RfcErrorInfo::new();
         unsafe {
-            let fd = RfcGetFunctionDesc(self.connection_handle, name_uc.as_ptr(), &mut err_trunk);
+            let fd = self.rfc_lib.rfc_api.RfcGetFunctionDesc(self.connection_handle, name_uc.as_ptr(), &mut err_trunk);
             if fd.is_null() {
                 return Err(err_trunk);
             }
-            let ff = RfcCreateFunction(fd, &mut err_trunk);
+            let ff = self.rfc_lib.rfc_api.RfcCreateFunction(fd, &mut err_trunk);
             if ff.is_null() {
                 return Err(err_trunk);
             }
@@ -108,17 +160,17 @@ impl RfcConnection {
             let fun_desc = RfcDecodedFieldDesc::from_handle(fftd)?;
             */
             let mut parm_count: u32 = 0;
-            let res = RfcGetParameterCount(fd, &mut parm_count, &mut err_trunk);
+            let res = self.rfc_lib.rfc_api.RfcGetParameterCount(fd, &mut parm_count, &mut err_trunk);
             if !res.is_ok() {
                 return Err(err_trunk);
             }
 
             let mut fun_desc = Vec::new();
             {
-                let mut rpd = RfcParameterDesc::new();
+                let mut rpd = RfcParameterDesc::new(&self.rfc_lib.rfc_api);
                 fun_desc.reserve_exact(parm_count as usize);
                 for i in 0..parm_count {
-                    let res = RfcGetParameterDescByIndex(fd, i, &mut rpd, &mut err_trunk);
+                    let res = self.rfc_lib.rfc_api.RfcGetParameterDescByIndex(fd, i, &mut rpd, &mut err_trunk);
                     if !res.is_ok() {
                         return Err(err_trunk);
                     }
@@ -139,14 +191,6 @@ impl RfcConnection {
 impl<'conn, 'fun> RfcFunction<'conn, 'fun> {
     /// Get a reference to an RFC parameter using the parameter index.
     pub fn get_parameter_by_index(
-        &self,
-        index: usize,
-    ) -> Option<&RfcParameter<'conn, 'fun>> {
-        self.fun_desc.get(index)
-    }
-
-    /// Get a mutable reference to an RFC parameter by using the parameter index.
-    pub fn get_parameter_by_index_mut(
         &mut self,
         index: usize,
     ) -> Option<&mut RfcParameter<'conn, 'fun>> {
@@ -181,7 +225,7 @@ impl<'conn, 'fun> RfcFunction<'conn, 'fun> {
     /// Call the remote function
     pub fn call(&mut self) -> Result<(), RfcErrorInfo> {
         let mut err_trunk = RfcErrorInfo::new();
-        let res = unsafe { RfcInvoke(self.connection.connection_handle, self.fun, &mut err_trunk) };
+        let res = unsafe { self.connection.rfc_lib.rfc_api.RfcInvoke(self.connection.connection_handle, self.fun, &mut err_trunk) };
         if !res.is_ok() {
             return Err(err_trunk);
         }
@@ -189,11 +233,11 @@ impl<'conn, 'fun> RfcFunction<'conn, 'fun> {
     }
 }
 
-impl Drop for RfcConnection {
+impl <'rfclib> Drop for RfcConnection<'rfclib> {
     fn drop(&mut self) {
         if !self.connection_handle.is_null() {
             let mut err_trunk = RfcErrorInfo::new();
-            let res = unsafe { RfcCloseConnection(self.connection_handle, &mut err_trunk) };
+            let res = unsafe { self.rfc_lib.rfc_api.RfcCloseConnection(self.connection_handle, &mut err_trunk) };
             if !res.is_ok() {
                 eprintln!(
                     "Warning: Unable to close RFC connection: {}",
@@ -208,7 +252,7 @@ impl<'conn, 'fun> Drop for RfcFunction<'conn, 'fun> {
     fn drop(&mut self) {
         if !self.fun.is_null() {
             let mut err_trunk = RfcErrorInfo::new();
-            let res = unsafe { RfcDestroyFunction(self.fun, &mut err_trunk) };
+            let res = unsafe { self.connection.rfc_lib.rfc_api.RfcDestroyFunction(self.fun, &mut err_trunk) };
             if !res.is_ok() {
                 eprintln!(
                     "Warning: Unable to destroy RFC function: {}",

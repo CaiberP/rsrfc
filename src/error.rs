@@ -75,30 +75,16 @@ pub struct RfcErrorInfo {
 
 impl std::fmt::Debug for RfcErrorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut len = 0;
-        for i in 0..self.message.len() {
-            if *self.message.get(i).unwrap() == 0 {
-                len = i;
-                break;
-            }
-        }
-        let mut msg = String::from_utf16_lossy(&self.message);
-        msg.truncate(len);
+        let msg = String::from_utf16_lossy(&self.message);
+        let msg = msg.trim();
         write!(f, "{}", msg)
     }
 }
 
 impl std::fmt::Display for RfcErrorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut len = 0;
-        for i in 0..self.message.len() {
-            if *self.message.get(i).unwrap() == 0 {
-                len = i;
-                break;
-            }
-        }
-        let mut msg = String::from_utf16_lossy(&self.message);
-        msg.truncate(len);
+        let msg = String::from_utf16_lossy(&self.message);
+        let msg = msg.trim();
         write!(f, "{}", msg)
     }
 }

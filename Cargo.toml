@@ -15,4 +15,6 @@ name = "rsrfctest"
 path = "src/main.rs"
 
 [dependencies]
+dlopen = "*"
+dlopen_derive = "*"
 widestring = "0.4.0"

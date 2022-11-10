@@ -5,17 +5,28 @@ use rsrfc::error::RfcErrorInfo;
 
 fn main() -> Result<(), RfcErrorInfo>{
     let conn_params = RfcConnectionParameters {
-        ashost: "10.8.0.18",
+        ashost: "192.168.8.4",
         sysnr: "00",
         client: "001",
         user: "bobpage",
         passwd: "Maggie8+Chow%-!",
         lang: "EN",
     };
+
+    // Open the rfc dll or .so
+    let rfc_dll = RfcLib::new().expect("Unable to open the rfc lib");
+
     // Establish an RFC connection. If you need to supply more parameters than
     // those supported by RfcConnectionParameters, simply call
     // RfcConnection::from_hashmap instead.
-    let conn = RfcConnection::new(&conn_params)?;
+    let conn = RfcConnection::new(&conn_params, &rfc_dll);
+    let conn = match conn {
+        Err(e) => {
+            eprintln!("oops {:?}", e);
+            return Err(e);
+        }
+        Ok(c) => c
+    };
 
     eprintln!("Fetching user names...");
     {
@@ -38,7 +49,7 @@ fn main() -> Result<(), RfcErrorInfo>{
             fields.append_rows(1)?;
             fields.first_row()?;
             let fieldname = fields
-                .get_field_by_index_mut(idx_fieldname)?;
+                .get_field_by_index(idx_fieldname)?;
             fieldname
                 .set_string("BNAME")?;
         }
