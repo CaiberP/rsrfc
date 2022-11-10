@@ -19,8 +19,8 @@ license.
 You need to download the SAP NW RFC library from SAP and put it in one of the
 folders in saprfc/ for compliation.
 
-For execution, you need to ensure LD_LIBRARY_PATH points to the RFC shared
-library.
+For execution, you need to ensure LD_LIBRARY_PATH (or DYLD_LIBRARY_PATH on the
+osx flavour of unix) points to the RFC shared library.
 
 Please see the src/main.rs file for an example that calls
 RFC_READ_TABLE to fetch a list of user names from the USR02 table.
@@ -48,3 +48,11 @@ production systems ;-) )
 
 * Writing RFC servers.
 
+## dl_open
+
+With the latest version, the rfclib is linked at runtime via dl_open and
+friends (or the LoadLibraryEx et al on Windows) The reasoning for this change
+is to allow an application to display a user friendly error message to the end
+user in case the library cannot be found. Which is more than unlikely, because
+for some weird reason it seems not to be allowed to ship a version of that
+library with your own code.
