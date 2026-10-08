@@ -231,6 +231,60 @@ impl<'conn, 'fun> RfcFunction<'conn, 'fun> {
         }
         Ok(())
     }
+
+    /// Reads table parameter and returns it as a json value
+    pub fn read_table_parameter(
+        &mut self,
+        parameter_name: &str,
+    ) -> Result<serde_json::Value, RfcErrorInfo> {
+        let data = self
+            .get_mut_parameter(parameter_name)
+            .ok_or(RfcErrorInfo::custom(&format!("{parameter_name} not found")))?;
+
+        let row_count = data.get_row_count()?;
+        let field_count = data.get_field_count()?;
+        let mut rows = Vec::new();
+
+        for i in 0..row_count {
+            data.set_row(i)?;
+            let mut object = serde_json::Map::new();
+
+            for j in 0..field_count {
+                let field = data.get_field_by_index(j)?;
+
+                let name = field.name.trim().to_string();
+                let value = field
+                    .get_chars()
+                    .or_else(|_| field.get_string())
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+
+                object.insert(name, serde_json::Value::String(value));
+            }
+            rows.push(serde_json::Value::Object(object));
+        }
+
+        Ok(serde_json::Value::Array(rows))
+    }
+
+    /// Reads parameter like exporting and returns it as a json value
+    pub fn read_scalar_parameter(
+        &mut self,
+        parameter_name: &str,
+    ) -> Result<serde_json::Value, RfcErrorInfo> {
+        let param = self
+            .get_mut_parameter(parameter_name)
+            .ok_or(RfcErrorInfo::custom(&format!("{parameter_name} not found")))?;
+
+        let value = param
+            .get_chars()
+            .or_else(|_| param.get_string())?
+            .trim()
+            .to_string();
+
+        Ok(serde_json::Value::String(value))
+    }
 }
 
 impl <'rfclib> Drop for RfcConnection<'rfclib> {
